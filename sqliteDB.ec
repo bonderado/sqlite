@@ -1,4 +1,13 @@
 #include "sqlite3.h"
+// https://github.com/crawshaw/sqlite/issues/41
+// https://runebook.dev/en/docs/sqlite/c3ref/data_count
+
+//for using sleep
+#ifdef __WIN32__
+#include<windows.h>
+#else
+#include<unistd.h>
+#endif
 
 #ifdef EC_STATIC
 public import static "ecrt"
@@ -140,7 +149,17 @@ public:
 
       if(inBegin) commit();
       lockingMode = "normal";
-      if((SQLiteResult)sqlite3_close(db) == busy)
+      int attempt = 0;
+      int maxAttemtpt = 100;
+      SQLiteResult result = (SQLiteResult)sqlite3_close(db);
+
+      while(attempt < maxAttemtpt && result == busy) {
+         result = (SQLiteResult)sqlite3_close(db);
+         ++attempt;
+         sleep(1);
+      }
+
+      if(result == busy)
          PrintLn("Can't close SQLite DB (busy)");
    }
 
@@ -189,7 +208,10 @@ public:
    }
    void reset() { if(stmt) sqlite3_reset(stmt); }
    void finalize() { if(stmt) sqlite3_finalize(stmt); stmt = null; }
-   SQLiteResult step() { return (SQLiteResult)sqlite3_step(stmt); }
+   SQLiteResult step() {
+       SQLiteResult out = (SQLiteResult)sqlite3_step(stmt);
+        return out;
+        }
 
    void bind_null(int pos) { sqlite3_bind_null(stmt, pos); }
    void bind_int(int pos, int i) { sqlite3_bind_int(stmt, pos, i); }
@@ -223,6 +245,7 @@ public:
       }
    }
 
+   int column_count() { return sqlite3_column_count(stmt); }
    FieldType column_type(int pos) { return (FieldType)sqlite3_column_type(stmt, pos); }
    int column_int(int pos) { return sqlite3_column_int(stmt, pos); }
    int64 column_int64(int pos) { return sqlite3_column_int64(stmt, pos); }
